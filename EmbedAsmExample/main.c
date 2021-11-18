@@ -75,27 +75,27 @@ void nonAsmBlur(BITMAP* bitmap, INT brighten, BYTE* temppBits) {
 	INT value = 0;//temp location of pixel channel value
 	INT value1 = 0;
 	INT value2 = 0;
+	int bytesPerPixel = bitsperPixel / 8;
+	int sizeBuf = width * height * bytesPerPixel;
 
-	// Note: below code assumes bitsPerPixel=3
-	for (int i = 0; i < ((height * width * 3)); ) {
-		for (int k = 0; k < 9; ) {
-			if ((i + k) >= (height * width * 3)) break;
-			value += temppBits[i + k];
+	// new[i] = (old[i] + old[i+bytesPerPixel] + old[i+2*bytesPerPixel]) / 3
+	// example, bytesPerPixel = 3 R(1)G(1)B(1)
+	// new[0] = (old[0] + old[3] + old[6]) , 
+	//   - the R part of the first pixel becomes the average of the R part of the first 3 pixels.
+	for (int i = 0; i < sizeBuf; i+=bytesPerPixel) {
+		value = 0;
+		value1 = 0;
+		value2 = 0;
+		for (int k = 0; k < 3*bytesPerPixel; k+=bytesPerPixel) {
+			if ((i + k) >= sizeBuf) break;
+			value += temppBits[i + k];	
 			value1 += temppBits[i + 1 + k];
 			value2 += temppBits[i + 2 + k];
-			k += 3;
 		}
 		g_pBits[i] = (BYTE)(value / 3);
 		g_pBits[i + 1] = (BYTE)(value1 / 3);
 		g_pBits[i + 2] = (BYTE)(value2 / 3);
-		i += 3;
-		value = 0;
-		value1 = 0;
-		value2 = 0;
-
 	}
-
-
 }
 /**
 mmx registers: mm0-mm7 - general purpose
@@ -407,6 +407,7 @@ LRESULT CALLBACK HelloWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 		BITMAP bmpInfo;
 		GetObject(g_hBitmap, sizeof(BITMAP), &bmpInfo);
 		int bmpSize = bmpInfo.bmWidth * bmpInfo.bmHeight * bmpInfo.bmBitsPixel/8;
+		
 
 		BYTE* tempBits = (BYTE*)malloc(bmpSize);
 		if (tempBits == NULL) {
@@ -443,7 +444,7 @@ LRESULT CALLBACK HelloWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 
 		memcpy(tempBits, g_pBits, bmpSize);
 		nonAsmBlur(&bmpInfo, 30, tempBits);
-		memcpy(g_pBits, tempBits, bmpSize);
+		//memcpy(g_pBits, tempBits, bmpSize);
 
 		free(tempBits);
 
