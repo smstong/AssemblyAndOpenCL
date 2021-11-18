@@ -109,52 +109,92 @@ paddusb - adds unsigned bytes (8 bytes) with saturation between two reg
 */
 void mmx_brighten(BITMAP* bitmap, INT brighten, BYTE* buffer) 
 {
+	int w = bitmap->bmWidth;
+	int h = bitmap->bmHeight;
+	int bitsPerPixel = bitmap->bmBitsPixel;
+	BYTE B[8];
+	for (int i = 0; i < 8; i++) {
+		B[i] = (BYTE)brighten;
+	}
+	__asm {
+		//save all reg values to stack
+		push eax
+		push ebx
+		push ecx
+		push edx
+		push edi
+		push ebp
+		push esi
 
-	//save all reg values to stack
+		//number of pixels in image (w*h) in reg eax
+		mov eax, w
+		mul h
 
-	//number of pixels in image (w*h) in reg eax
+		//number of bytes in image (bitsPerPixel/8*pixels)
+		mov ebx, bitsPerPixel
+		shr ebx, 3
+		mul ebx
 
-	//number of bytes in image (bitsPerPixel/8*pixels)
+		//divide eax by 8 as each mmx reg holds 8 bytes
+		shr eax, 3
 
-	//divide eax by 8 as each mmx reg holds 8 bytes
+		//store buffer in reg ebx
+		mov ebx, buffer
 
-	//store buffer in reg ebx
+		//clear mm2 reg
+		pxor mm2, mm2
 
-	//clear mm2 reg
+		//store brighten value to mm0
+		movq mm0, B
 
-	//store brighten value
+		//brighten value needs to be in each byte of an mmx reg
+		//loop and shift and load brighten value and "or"
+		//until each byte in an mmx reg holds brighten value
+		//use mm0 to hold value
+		//note: can't use mm2 as work (calc) can only be done
+		//using mmx reg. Only loading in a value can be done using
+		//memory and mmx reg
 
-	//brighten value needs to be in each byte of an mmx reg
-	//loop and shift and load brighten value and "or"
-	//until each byte in an mmx reg holds brighten value
-	//use mm0 to hold value
-	//note: can't use mm2 as work (calc) can only be done
-	//using mmx reg. Only loading in a value can be done using
-	//memory and mmx reg
+		//clear ecx reg to use as counter
+		xor ecx, ecx
 
-	//clear ecx reg to use as counter
+		//start a loop
+		loop1:
+			
+		//end loop if number of loops is greater than bytes
+		//in image/8
+			cmp eax, ecx
+			jle loop1_end
 
-	//start a loop
-	//end loop if number of loops is greater than bytes
-	//in image/8
+		//load 8 bytes into mm1 
+			movq mm1, [ebx]
 
-	//load 8 bytes into mm1 
+		//add brighten value with saturation
+			paddusb mm1, mm0
+		//copy brighten value back to buffer
+			movq [ebx], mm1
+		//move the buffer pointer position by 8
+		//since we are grabbing 8 bytes at once
+			add ebx, 8
 
-	//add brighten value with saturation
+		//inc our counter (ecx)
+			inc ecx
 
-	//copy brighten value back to buffer
+		//loop back to repeat
+			jmp loop1
 
-	//move the buffer pointer position by 8
-	//since we are grabbing 8 bytes at once
-
-	//inc our counter (ecx)
-
-	//loop back to repeat
-
-	//return reg values from stack
-
-	//end mmx (emms)
-
+		//restore registers
+		loop1_end:
+			pop esi
+			pop ebp
+			pop edi
+			pop edx
+			pop ecx
+			pop ebx
+			pop eax
+		//end mmx (emms)
+			emms
+	}
 }
 
 void assembly_BLUR(BITMAP* bitmap, INT brighten, BYTE* buffer) 
@@ -298,11 +338,6 @@ convention for assembly (stack parameter passing)
 **/
 LRESULT CALLBACK HelloWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
 	PAINTSTRUCT ps;
-	RECT	rect;
-	BITMAP* bitmap;
-	BOOL bSuccess;
-	HANDLE hFile;
-	int error = 0;
 
 	switch (message) {
 	case WM_CREATE://additional things to do when window is created
@@ -311,7 +346,7 @@ LRESULT CALLBACK HelloWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 		BITMAPFILEHEADER bmfh;
 		DWORD dwBytesRead, dwInfoSize;
 
-		hFile = CreateFile(TEXT("splash.bmp"), GENERIC_READ, FILE_SHARE_READ,
+		HANDLE hFile = CreateFile(TEXT("splash.bmp"), GENERIC_READ, FILE_SHARE_READ,
 			NULL, OPEN_EXISTING, 0, NULL);
 
 		if (hFile == INVALID_HANDLE_VALUE) {
@@ -320,7 +355,7 @@ LRESULT CALLBACK HelloWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 			return NULL;
 		}
 
-		bSuccess = ReadFile(hFile, &bmfh, sizeof(BITMAPFILEHEADER),
+		BOOL bSuccess = ReadFile(hFile, &bmfh, sizeof(BITMAPFILEHEADER),
 			&dwBytesRead, NULL);
 
 		if (!bSuccess || (dwBytesRead != sizeof(BITMAPFILEHEADER))
@@ -336,6 +371,7 @@ LRESULT CALLBACK HelloWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 		if (pbmi == NULL) {
 			MessageBox(hwnd, TEXT("Low memory"), TEXT("WARNING"), MB_OK);
 			PostQuitMessage(1);
+			return NULL;
 		}
 
 		bSuccess = ReadFile(hFile, pbmi, dwInfoSize, &dwBytesRead, NULL);
@@ -346,7 +382,12 @@ LRESULT CALLBACK HelloWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 			PostQuitMessage(1);
 			return NULL;
 		}
-		g_hBitmap = CreateDIBSection(NULL, pbmi, DIB_RGB_COLORS, (VOID**)&g_pBits, NULL, 0);
+
+		g_hBitmap = CreateDIBSection(NULL, 
+			pbmi, DIB_RGB_COLORS, 
+			(VOID**)&g_pBits,
+			NULL, 0);
+		
 		bSuccess = ReadFile(hFile, g_pBits, bmfh.bfSize - bmfh.bfOffBits, &dwBytesRead, NULL);
 
 		if (!bSuccess || (g_hBitmap == NULL) )
@@ -365,7 +406,7 @@ LRESULT CALLBACK HelloWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 		HDC hdcMem = CreateCompatibleDC(hdc);
 		BITMAP bmpInfo;
 		GetObject(g_hBitmap, sizeof(BITMAP), &bmpInfo);
-		int bmpSize = bmpInfo.bmWidth * bmpInfo.bmHeight * 3;
+		int bmpSize = bmpInfo.bmWidth * bmpInfo.bmHeight * bmpInfo.bmBitsPixel/8;
 
 		BYTE* tempBits = (BYTE*)malloc(bmpSize);
 		if (tempBits == NULL) {
@@ -373,7 +414,8 @@ LRESULT CALLBACK HelloWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 		}
 
 		memcpy(tempBits, g_pBits, bmpSize);
-		assembly_BLUR(&bmpInfo, 30, tempBits);
+		//assembly_BLUR(&bmpInfo, 30, tempBits);
+		mmx_brighten(&bmpInfo, 30, tempBits);
 		memcpy(g_pBits, tempBits, bmpSize);
 
 		free(tempBits);
@@ -392,7 +434,7 @@ LRESULT CALLBACK HelloWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 		HDC hdcMem = CreateCompatibleDC(hdc);
 		BITMAP bmpInfo;
 		GetObject(g_hBitmap, sizeof(BITMAP), &bmpInfo);
-		int bmpSize = bmpInfo.bmWidth * bmpInfo.bmHeight * 3;
+		int bmpSize = bmpInfo.bmWidth * bmpInfo.bmHeight * bmpInfo.bmBitsPixel/8;
 
 		BYTE* tempBits = (BYTE*)malloc(bmpSize);
 		if (tempBits == NULL) {
@@ -431,6 +473,7 @@ LRESULT CALLBACK HelloWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 		return 0;
 	}
 	case WM_DESTROY://how to handle a destroy (close window app) msg
+		DeleteObject(g_hBitmap);
 		PostQuitMessage(0);
 		return 0;
 	}
