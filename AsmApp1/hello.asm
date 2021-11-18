@@ -1,12 +1,21 @@
+INCLUDELIB kernel32.lib
+INCLUDELIB user32.lib
+
 .386								; instruction set
 .model flat,stdcall					; memory model and function call spec
-option casemap:none					; casesensitive setup
 
-includelib user32.lib
 
 ; Windows API prototype declaration
+
 MessageBox equ MessageBoxA
-MessageBoxA proto :DWORD, :DWORD, :DWORD, :DWORD
+MessageBoxA PROTO,
+	hwnd:DWORD,
+	lpCaption:DWORD,
+	lpText:DWORD,
+	uType:DWORD
+
+ExitProcess PROTO,
+	dwExitCode:DWORD
 
 .data								; data section (RW)
 
