@@ -2,6 +2,8 @@
 .model flat,stdcall					; memory model and function call spec
 option casemap:none					; casesensitive setup
 
+includelib user32.lib
+
 ; Windows API prototype declaration
 MessageBox equ MessageBoxA
 MessageBoxA proto :DWORD, :DWORD, :DWORD, :DWORD
