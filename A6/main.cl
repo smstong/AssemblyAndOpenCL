@@ -7,13 +7,8 @@ __kernel void bright(
 	__read_only image2d_t inputImage,
 	__write_only image2d_t outputImage)  
 {
-	int width = get_image_width(inputImage);
-	int height = get_image_height(inputImage);
-
-	const size_t gid = get_global_id(0);
-
-	int x = gid / width;
-	int y = gid % width;
+	int x = get_global_id(0);
+	int y = get_global_id(1);
 	int2 coord = (int2)(x,y);
 
 	uint4 in_v = read_imageui(inputImage, sampler1, coord);

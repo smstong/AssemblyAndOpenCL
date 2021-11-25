@@ -509,7 +509,7 @@ void assembly_BLUR(BITMAP* bitmap, INT brighten, BYTE* buffer)
 openclbrigthen:
 YOUR CODE MOSTLY GOES HERE (KernelSource is defined at top
 */
-void openclbrigthen(int width, int height, BYTE* image) 
+BYTE* openclbrigthen(int width, int height, BYTE* image)
 {
 	cl_device_id device_id;             // compute device id 
 	cl_context context;                 // compute context
@@ -605,15 +605,17 @@ void openclbrigthen(int width, int height, BYTE* image)
 	}
 	fseek(fp, 0L, SEEK_SET);
 	size_t n = fread(source_str, 1, source_size, fp);
-	if(n != source_size) {
+	if (n != source_size) {
 		MsgBoxF(TEXT("read error"));
 		return NULL;
 	}
 
+	fclose(fp);
+
 	program = clCreateProgramWithSource(context, 1,
 		&source_str, (const size_t*)&source_size, &errNum);
 
-	
+
 	free(source_str);
 	source_str = NULL;
 
@@ -673,23 +675,22 @@ void openclbrigthen(int width, int height, BYTE* image)
 
 	//// Get the maximum work group size for executing the kernel on the device
 	////
-	size_t workGrpSize;
-	size_t globalWorkSize;
-	errNum = clGetKernelWorkGroupInfo(kernel, device_id,
+	size_t workGrpSize[2] = { 16, 16 };
+	size_t globalWorkSize[2] = { width, height };
+	/*errNum = clGetKernelWorkGroupInfo(kernel, device_id,
 		CL_KERNEL_WORK_GROUP_SIZE, sizeof(workGrpSize), &workGrpSize, NULL);
 	if (errNum != CL_SUCCESS)
 	{
 		MsgBoxF(TEXT("Error: Failed to retrieve kernel work group info! %d\n"), errNum);
 		return NULL;
-	}
+	}*/
 	
 	//define global size by width and height
 
-	globalWorkSize = width * height * 2;
 
 	//enqueue the kernel
 	errNum = clEnqueueNDRangeKernel(commands, kernel,
-		1,
+		sizeof(workGrpSize)/sizeof(workGrpSize[0]),
 		NULL,
 		&globalWorkSize, 
 		&workGrpSize,
